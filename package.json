@@ -86,10 +86,11 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
+    "vscode:prepublish": "npm run webpack",
+    "webpack": "webpack --mode production",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "package": "vsce package",
+    "package": "npm run webpack && vsce package --dependencies",
     "publish": "vsce publish",
     "test": "node ./out/test/runTest.js"
   },
@@ -97,8 +98,12 @@
     "@types/node": "^18.0.0",
     "@types/vscode": "^1.75.0",
     "@vscode/test-electron": "^2.3.0",
+    "@vscode/vsce": "^3.7.1",
+    "ts-loader": "^9.5.4",
     "typescript": "^5.0.0",
-    "vsce": "^2.15.0"
+    "vsce": "^2.15.0",
+    "webpack": "^5.105.4",
+    "webpack-cli": "^6.0.1"
   },
   "dependencies": {
     "shiki": "^4.0.2"

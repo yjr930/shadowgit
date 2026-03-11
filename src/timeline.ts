@@ -85,8 +85,8 @@ export class TimelineView {
         });
     }
 
-    refresh(): void {
-        this.provider.refresh();
+    async refresh(): Promise<void> {
+        await this.provider.refresh();
     }
 
     dispose(): void {

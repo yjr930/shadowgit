@@ -81,7 +81,7 @@ class AgentHttpServer {
 
                     await fileChangeHooks.preAgentAutoSave();
                     agentState.startAgentTask(task);
-                    timelineView.refresh();
+                    await timelineView.refresh();
 
                     this.sendJson(res, { status: 'started', task });
                     return;
@@ -96,7 +96,7 @@ class AgentHttpServer {
 
                     await fileChangeHooks.postAgentCommit(state.currentAgentTask);
                     agentState.endAgentTask();
-                    timelineView.refresh();
+                    await timelineView.refresh();
 
                     this.sendJson(res, { status: 'ended' });
                     return;

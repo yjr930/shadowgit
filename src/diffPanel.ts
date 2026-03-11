@@ -1,18 +1,16 @@
 import * as vscode from 'vscode';
 import { shadowGit, CommitInfo } from './shadowGit';
+import { createHighlighter } from 'shiki';
 
 let shikiInstance: any = null;
 let shikiLoading: Promise<any> | null = null;
-
-const importShiki = new Function('return import("shiki")') as () => Promise<typeof import('shiki')>;
 
 async function ensureHighlighter(): Promise<any> {
     if (shikiInstance) return shikiInstance;
     if (shikiLoading) return shikiLoading;
     
     shikiLoading = (async () => {
-        const shiki = await importShiki();
-        shikiInstance = await shiki.createHighlighter({
+        shikiInstance = await createHighlighter({
             themes: ['dark-plus', 'light-plus'],
             langs: ['javascript', 'typescript', 'python', 'rust', 'go', 'java', 'c', 'cpp', 'css', 'html', 'json', 'yaml', 'bash', 'sql', 'markdown']
         });
