@@ -6,5 +6,6 @@ node_modules/**
 out/test/**
 src/**
 .gitignore
-*.md
 !README.md
+SKILL.md
+agent-skill.md
