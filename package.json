@@ -1,0 +1,106 @@
+{
+  "name": "shadowgit",
+  "displayName": "Shadow Git",
+  "description": "AI Agent Version Control & Time-Travel Extension",
+  "version": "0.0.1",
+  "publisher": "shadowgit",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shadowgit/shadowgit"
+  },
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Other",
+    "Version Control"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "shadowgit.startAgent",
+        "title": "Shadow Git: Start Agent Task"
+      },
+      {
+        "command": "shadowgit.endAgent",
+        "title": "Shadow Git: End Agent Task"
+      },
+      {
+        "command": "shadowgit.showTimeline",
+        "title": "Shadow Git: Show Timeline"
+      },
+      {
+        "command": "shadowgit.restartServer",
+        "title": "Shadow Git: Restart Server"
+      },
+      {
+        "command": "shadowgit.checkoutToCommit",
+        "title": "Shadow Git: Checkout to This Version"
+      },
+      {
+        "command": "shadowgit.truncateHistory",
+        "title": "Shadow Git: Delete History Before This"
+      }
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "shadowgit-timeline",
+          "name": "Agent Timeline"
+        }
+      ]
+    },
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "shadowgit.startAgent"
+        },
+        {
+          "command": "shadowgit.endAgent"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "shadowgit.checkoutToCommit",
+          "when": "view == shadowgit-timeline",
+          "group": "navigation"
+        },
+        {
+          "command": "shadowgit.truncateHistory",
+          "when": "view == shadowgit-timeline",
+          "group": "2_modification"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Shadow Git",
+      "properties": {
+        "shadowgit.configPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to config file (default: ~/.shadowgit/config.yaml)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package",
+    "publish": "vsce publish",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.75.0",
+    "@vscode/test-electron": "^2.3.0",
+    "typescript": "^5.0.0",
+    "vsce": "^2.15.0"
+  },
+  "dependencies": {
+    "shiki": "^4.0.2"
+  }
+}
