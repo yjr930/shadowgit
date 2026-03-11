@@ -78,6 +78,11 @@ function tokenizeToHtmlLines(highlighter: any, code: string, lang: string, theme
     }
 }
 
+function truncateTitle(message: string, maxLen: number = 30): string {
+    if (message.length <= maxLen) return message;
+    return message.substring(0, maxLen - 3) + '...';
+}
+
 export class DiffPanel {
     private panel: vscode.WebviewPanel | undefined;
     private currentCommit: CommitInfo | undefined;
@@ -87,13 +92,13 @@ export class DiffPanel {
 
         if (this.panel) {
             this.panel.reveal(vscode.ViewColumn.One);
-            this.panel.title = `Diff: ${commit.message}`;
+            this.panel.title = `Diff: ${truncateTitle(commit.message)}`;
             
             this.panel.webview.postMessage({ type: 'loading', value: true });
         } else {
             this.panel = vscode.window.createWebviewPanel(
                 'shadowgit-diff',
-                `Diff: ${commit.message}`,
+                `Diff: ${truncateTitle(commit.message)}`,
                 vscode.ViewColumn.One,
                 { enableScripts: true, retainContextWhenHidden: true }
             );

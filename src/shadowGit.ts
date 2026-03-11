@@ -36,22 +36,26 @@ export class ShadowGit {
 
         try {
             const headPath = path.join(this.repoPath, 'HEAD');
-            if (fs.existsSync(headPath)) {
-                setImmediate(() => this.ensureGitignore());
-                return true;
-            }
-            await this.execGit(['init']);
-            await this.ensureGitignore();
-            return true;
+            return fs.existsSync(headPath);
         } catch (error) {
             console.error('Failed to initialize Shadow Git:', error);
             return false;
         }
     }
 
+    private hasRepo(): boolean {
+        if (!this.repoPath) {
+            return false;
+        }
+        return fs.existsSync(path.join(this.repoPath, 'HEAD'));
+    }
+
     private async execGit(args: string[]): Promise<string> {
         if (!this.workspaceRoot) {
             throw new Error('No workspace folder found');
+        }
+        if (!this.hasRepo()) {
+            throw new Error('Shadow Git repo not initialized');
         }
 
         const env = {
@@ -74,25 +78,6 @@ export class ShadowGit {
                 return error.stdout;
             }
             throw error;
-        }
-    }
-
-    private ensureGitignore(): void {
-        if (!this.workspaceRoot) return;
-
-        const gitignorePath = path.join(this.workspaceRoot, '.gitignore');
-
-        try {
-            if (fs.existsSync(gitignorePath)) {
-                const content = fs.readFileSync(gitignorePath, 'utf8');
-                if (!content.includes(SHADOW_REPO_DIR)) {
-                    fs.appendFileSync(gitignorePath, `\n${SHADOW_REPO_DIR}/\n`);
-                }
-            } else {
-                fs.writeFileSync(gitignorePath, `${SHADOW_REPO_DIR}/\n`);
-            }
-        } catch (error) {
-            console.error('Failed to update .gitignore:', error);
         }
     }
 
@@ -121,6 +106,9 @@ export class ShadowGit {
     async getLog(limit: number = 50): Promise<CommitInfo[]> {
         console.log('[ShadowGit] getLog called, workspace:', this.workspaceRoot);
         try {
+            if (!this.hasRepo()) {
+                return [];
+            }
             const format = '%H|%h|%an|%ae|%ai|%s';
             const output = await this.execGit([
                 'log',
@@ -163,6 +151,9 @@ export class ShadowGit {
 
     async getFileAtCommit(commitHash: string, filePath: string): Promise<string | null> {
         try {
+            if (!this.hasRepo()) {
+                return null;
+            }
             const fullPath = path.isAbsolute(filePath) 
                 ? filePath 
                 : path.join(this.workspaceRoot!, filePath);
@@ -180,6 +171,9 @@ export class ShadowGit {
 
     async getParentCommitHash(commitHash: string): Promise<string | null> {
         try {
+            if (!this.hasRepo()) {
+                return null;
+            }
             const output = await this.execGit([
                 'log',
                 '--format=%H',
@@ -195,6 +189,9 @@ export class ShadowGit {
 
     async getCommitFiles(commitHash: string): Promise<{ path: string; additions: number; deletions: number; status: string }[]> {
         try {
+            if (!this.hasRepo()) {
+                return [];
+            }
             const numstatOutput = await this.execGit([
                 'log',
                 '--format=',
@@ -284,6 +281,10 @@ export class ShadowGit {
 
     async revertToCommit(commitHash: string): Promise<boolean> {
         try {
+            if (!this.hasRepo()) {
+                vscode.window.showWarningMessage('Shadow Git repo not initialized');
+                return false;
+            }
             const parentHash = await this.getParentCommitHash(commitHash);
             
             if (!parentHash) {
@@ -316,6 +317,10 @@ export class ShadowGit {
 
     async checkoutToCommit(commitHash: string): Promise<boolean> {
         try {
+            if (!this.hasRepo()) {
+                vscode.window.showWarningMessage('Shadow Git repo not initialized');
+                return false;
+            }
             const lsTreeOutput = await this.execGit([
                 'ls-tree',
                 '-r',
@@ -349,6 +354,10 @@ export class ShadowGit {
 
     async truncateHistoryBefore(commitHash: string): Promise<boolean> {
         try {
+            if (!this.hasRepo()) {
+                vscode.window.showWarningMessage('Shadow Git repo not initialized');
+                return false;
+            }
             await this.execGit(['replace', '--graft', commitHash]);
             await this.execGit(['filter-branch', '--', '--all']);
             // Clean up replace ref and filter-branch backup

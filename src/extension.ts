@@ -16,8 +16,6 @@ const DiffDocumentProvider: vscode.TextDocumentContentProvider = {
     }
 };
 
-let serverRef: { stop(): void } | undefined;
-
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!workspaceRoot) {
@@ -31,7 +29,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
     shadowGit.initialize().then(success => {
         if (!success) {
-            vscode.window.showWarningMessage('Failed to initialize Shadow Git');
+            console.log('[ShadowGit] .agent-repo not found; waiting for commits');
         }
     });
 
@@ -43,25 +41,36 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         })
     );
 
+    const refreshTimelineDebounced = (() => {
+        let timeout: NodeJS.Timeout | undefined;
+        return () => {
+            if (timeout) {
+                clearTimeout(timeout);
+            }
+            timeout = setTimeout(() => timelineView.refresh(), 300);
+        };
+    })();
+
+    const repoWatcher = vscode.workspace.createFileSystemWatcher(
+        new vscode.RelativePattern(workspaceRoot, '.agent-repo/{HEAD,refs/**,logs/HEAD}')
+    );
+    repoWatcher.onDidChange(refreshTimelineDebounced);
+    repoWatcher.onDidCreate(refreshTimelineDebounced);
+    repoWatcher.onDidDelete(refreshTimelineDebounced);
+    context.subscriptions.push(repoWatcher);
+
     setImmediate(async () => {
-        const [{ registerCommands }, { agentHttpServer }, { diffPanel, preloadHighlighter }] = await Promise.all([
+        const [{ registerCommands }, { diffPanel, preloadHighlighter }] = await Promise.all([
             import('./commands'),
-            import('./server'),
             import('./diffPanel')
         ]);
 
         registerCommands(context);
         context.subscriptions.push(diffPanel);
 
-        agentHttpServer.start().catch(err => {
-            console.error('[ShadowGit] Failed to start HTTP server:', err);
-        });
-        serverRef = agentHttpServer;
-
         setTimeout(() => preloadHighlighter(), 3000);
     });
 }
 
 export function deactivate(): void {
-    serverRef?.stop();
 }

@@ -1,46 +1,12 @@
 import * as vscode from 'vscode';
 import { shadowGit, CommitInfo } from './shadowGit';
-import { agentState } from './state';
-import { fileChangeHooks } from './hooks';
 import { timelineView, CommitTreeItem } from './timeline';
-import { agentHttpServer } from './server';
 
 export function registerCommands(context: vscode.ExtensionContext): void {
     context.subscriptions.push(
-        vscode.commands.registerCommand('shadowgit.startAgent', async () => {
-            const task = await vscode.window.showInputBox({
-                prompt: 'Enter agent task description',
-                placeHolder: 'e.g., Implement backtest engine margin logic'
-            });
-
-            if (task !== undefined) {
-                await fileChangeHooks.preAgentAutoSave();
-                agentState.startAgentTask(task);
-                vscode.window.showInformationMessage(`Agent task started: ${task}`);
-            }
-        }),
-
-        vscode.commands.registerCommand('shadowgit.endAgent', async () => {
-            const state = agentState.getState();
-            if (!state.isExecuting) {
-                vscode.window.showWarningMessage('No agent task is currently executing');
-                return;
-            }
-
-            await fileChangeHooks.postAgentCommit(state.currentAgentTask);
-            agentState.endAgentTask();
-            timelineView.refresh();
-            vscode.window.showInformationMessage('Agent task completed and committed');
-        }),
-
         vscode.commands.registerCommand('shadowgit.showTimeline', () => {
             timelineView.refresh();
             vscode.window.showInformationMessage('Timeline refreshed');
-        }),
-
-        vscode.commands.registerCommand('shadowgit.restartServer', async () => {
-            agentHttpServer.stop();
-            await agentHttpServer.start();
         }),
 
         vscode.commands.registerCommand('shadowgit.showCommitDiff', async (commit: CommitInfo) => {

@@ -1,101 +1,120 @@
 # Shadow Git
 
-AI Agent 版本控制与 VS Code Time-Travel 扩展
+AI 智能体版本控制与 VS Code 时间回溯插件
 
 ## 功能特性
 
-- **独立 Git Repository**：将所有代码变更存储在隐藏的 `.agent-repo` 目录中，与主仓库分离
-- **Agent/User 区分**：自动识别并标记提交为 🤖（Agent）或 👤（User）
-- **Timeline 视图**：在 Explorer 侧边栏所有变更历史
-- **Diff Viewer中可视化展示**：语法高亮查看文件变更，支持 light/dark theme
-- **Time Travel**：一键 checkout 到任意历史版本
-- **HTTP API**：通过编程方式控制版本跟踪
-
-## 安装
-
-### 从 VSIX 安装
-
-```bash
-code --install-extension shadowgit-0.0.1.vsix
-```
-
-### 从 Marketplace 安装
-
-在 VS Code 扩展中搜索 "Shadow Git"
-
-## 配置
-
-在 VS Code 设置中添加：
-
-```json
-{
-  "shadowgit.configPath": "~/.shadowgit/config.yaml"
-}
-```
-
-创建 `~/.shadowgit/config.yaml`：
-
-```yaml
-port: 19789
-```
-
-- `shadowgit.configPath`：配置文件路径（默认：`~/.shadowgit/config.yaml`）
-- `port`：HTTP Server 端口，用于与 Agent 通信（默认：19789）
-
-## 使用方法
-
-### 手动使用
-
-1. **开始 Agent Task**：`Shadow Git: Start Agent Task`
-   - 输入任务描述（例如："实现登录功能"）
-
-2. **进行修改**：正常编辑代码
-
-3. **结束 Agent Task**：`Shadow Git: End Agent Task`
-   - 所有变更将自动 commit
-
-4. **查看 Timeline**：在 Explorer 侧边栏中查看 "Agent Timeline"
-   - 点击任意 commit 查看文件 diff
-   - 右键可 checkout 到该版本
-
-### HTTP API
-
-| 方法 | 端点 | 描述 |
-|------|------|------|
-| GET | `/status` | 检查 Agent 状态（返回 `isExecuting` 和 `currentTask`） |
-| POST | `/start` | 开始 Agent 任务（`{"task": "description"}`） |
-| POST | `/end` | 结束 Agent 任务 |
-| GET | `/commits` | 获取最近 50 条 commit |
-
-示例：
-
-```bash
-# 检查 Agent 状态
-curl http://localhost:19789/status
-
-# 开始 Agent 任务
-curl -X POST http://localhost:19789/start -H "Content-Type: application/json" -d '{"task": "实现功能"}'
-
-# 结束 Agent 任务
-curl -X POST http://localhost:19789/end
-
-# 获取 commit 历史
-curl http://localhost:19789/commits
-```
-
-## 命令
-
-| 命令 | 描述 |
-|------|------|
-| `Shadow Git: Start Agent Task` | 开始跟踪 Agent 变更 |
-| `Shadow Git: End Agent Task` | 提交所有 Agent 变更 |
-| `Shadow Git: Show Timeline` | 刷新 Timeline 视图 |
-| `Shadow Git: Restart Server` | 重启 HTTP Server |
-| `Shadow Git: Checkout to This Version` | Checkout 到选定 commit（右键菜单） |
-| `Shadow Git: Delete History Before This` | 删除此版本之前的所有历史（右键菜单） |
+- **独立 Git 仓库**：所有代码变更存储在隐藏的 `.agent-repo` 目录中，与主仓库完全分离
+- **智能体/用户区分**：自动识别并标记提交为 🤖（智能体）或 👤（用户）
+- **时间轴视图**：在资源管理器侧边栏查看所有变更历史
+- **差异对比器**：查看文件变更，支持语法高亮，适配浅色/深色主题
+- **时间回溯**：一键检出任意历史版本
+- **自动提交信息**：根据实际文件改动生成具体描述，如 `Agent: quick_sort.py(删除), utils.py(修改)`
 
 ## 架构
 
-- **隐藏 Git Repository**：工作区中的 `.agent-repo/`
-- **自动 Gitignore**：自动将 `.agent-repo` 排除在主 Git 之外
-- **Commit 识别**：Agent 提交的 commit message 前缀为 `Agent:`
+```
+工作区/
+├── .agent-repo/          # 隐藏的 Git 仓库（不提交到主 Git）
+├── .gitignore            # 自动排除 .agent-repo
+├── .opencode.yaml        # Opencode 插件配置
+└── [项目文件...]
+```
+
+**核心设计**：
+- `.agent-repo` 是独立的 bare Git 仓库，通过 `GIT_DIR` 和 `GIT_WORK_TREE` 环境变量操作
+- 智能体提交以 `Agent:` 开头，用户提交以 `Human:` 开头
+- 提交信息优先使用 `git diff --stat` 获取实际改动的文件列表
+
+## 安装
+
+Shadow Git 由两部分组成：
+
+### 1. VS Code 扩展（必需）
+
+```bash
+# 安装 VSIX
+code --install-extension shadowgit-0.0.1.vsix
+
+# 或从源码打包
+cd shadowgit
+npm install
+npm run package
+code --install-extension shadowgit-0.0.1.vsix
+```
+
+### 2. Opencode 插件（可选）
+
+```bash
+# 复制插件文件
+mkdir -p ~/.opencode/plugins/shadowgit
+cp shadowgit/opencode-plugin/shadowgit.ts ~/.opencode/plugins/shadowgit/
+```
+
+在项目根目录创建 `.opencode.yaml` 启用插件：
+
+```yaml
+plugins:
+  - name: shadowgit
+    enabled: true
+```
+
+## 使用方法
+
+### 自动跟踪（Opencode 插件）
+
+插件会自动：
+1. **初始化仓库**：首次工具执行时创建 `.agent-repo`
+2. **检测变更**：使用 `write/edit/multiedit/bash` 等工具时会收集文件改动
+3. **自动提交**：会话结束时（`session.idle` 或 `session.deleted`）自动提交
+4. **生成提交信息**：根据实际改动生成描述，如：
+   - `Agent: quick_sort.py(新增), utils.py(修改)`
+   - `Agent: 删除 old_file.py`
+   - `Agent: foo.py, bar.ts 等3个文件`
+
+### 手动使用（VS Code 扩展）
+
+1. **查看时间轴**：在资源管理器侧边栏查看 "Agent Timeline"
+   - 点击任意提交查看文件差异
+   - 右键菜单可检出该版本
+
+2. **命令面板**：
+
+   | 命令 | 描述 |
+   |------|------|
+   | `Shadow Git: Show Timeline` | 刷新时间轴视图 |
+   | `Shadow Git: Checkout to This Version` | 检出到选定提交（右键菜单） |
+   | `Shadow Git: Delete History Before This` | 删除此版本之前的所有历史（右键菜单） |
+
+## 注意事项
+
+### 不要将主项目目录添加到 .agent-repo
+
+确保工作区根目录的 `.gitignore` 正确排除了 `shadowgit/`（如果存在）：
+
+```gitignore
+.agent-repo/
+shadowgit/
+```
+
+否则 Git 会将主项目识别为 submodule，导致无法检测文件变化。
+
+### 日志位置
+
+Opencode 插件日志位于：`~/.shadowgit/plugin.log`
+
+## 常见问题
+
+**Q: 为什么提交信息显示 "Agent changes" 而不是具体文件？**
+
+A: 可能原因：
+1. 插件未正确获取工作区路径（检查日志中的 `Workspace root`）
+2. `.agent-repo` 中存在错误的 submodule 引用
+3. 插件未重启，需要重新加载 opencode
+
+**Q: 如何在新的工作区使用？**
+
+A:
+1. 安装 VS Code 扩展
+2. 配置 `.opencode.yaml` 启用插件
+3. 在该目录下使用 opencode 即可自动跟踪

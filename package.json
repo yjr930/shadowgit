@@ -20,20 +20,8 @@
   "contributes": {
     "commands": [
       {
-        "command": "shadowgit.startAgent",
-        "title": "Shadow Git: Start Agent Task"
-      },
-      {
-        "command": "shadowgit.endAgent",
-        "title": "Shadow Git: End Agent Task"
-      },
-      {
         "command": "shadowgit.showTimeline",
         "title": "Shadow Git: Show Timeline"
-      },
-      {
-        "command": "shadowgit.restartServer",
-        "title": "Shadow Git: Restart Server"
       },
       {
         "command": "shadowgit.checkoutToCommit",
@@ -53,14 +41,7 @@
       ]
     },
     "menus": {
-      "commandPalette": [
-        {
-          "command": "shadowgit.startAgent"
-        },
-        {
-          "command": "shadowgit.endAgent"
-        }
-      ],
+      "commandPalette": [],
       "view/item/context": [
         {
           "command": "shadowgit.checkoutToCommit",
@@ -76,13 +57,7 @@
     },
     "configuration": {
       "title": "Shadow Git",
-      "properties": {
-        "shadowgit.configPath": {
-          "type": "string",
-          "default": "",
-          "description": "Path to config file (default: ~/.shadowgit/config.yaml)"
-        }
-      }
+      "properties": {}
     }
   },
   "scripts": {
