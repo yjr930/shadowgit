@@ -29,6 +29,69 @@ export class ShadowGit {
         }
     }
 
+    async initRepo(): Promise<boolean> {
+        if (!this.workspaceRoot || !this.repoPath) {
+            vscode.window.showErrorMessage('No workspace folder found');
+            return false;
+        }
+
+        try {
+            if (!fs.existsSync(this.repoPath)) {
+                fs.mkdirSync(this.repoPath, { recursive: true });
+            }
+
+            const headPath = path.join(this.repoPath, 'HEAD');
+            if (!fs.existsSync(headPath)) {
+                const { execFile } = require('child_process');
+                const { promisify } = require('util');
+                const execFileAsync = promisify(execFile);
+                
+                await execFileAsync('git', ['init'], {
+                    cwd: this.workspaceRoot,
+                    env: {
+                        ...process.env,
+                        GIT_DIR: this.repoPath,
+                        GIT_WORK_TREE: this.workspaceRoot
+                    }
+                });
+            }
+
+            this.ensureGitignore();
+            this.ensureOpencodeConfig();
+
+            vscode.window.showInformationMessage('Shadow Git repository initialized');
+            return true;
+        } catch (error: any) {
+            vscode.window.showErrorMessage(`Failed to initialize: ${error.message}`);
+            return false;
+        }
+    }
+
+    private ensureGitignore(): void {
+        if (!this.workspaceRoot) return;
+        const gitignorePath = path.join(this.workspaceRoot, '.gitignore');
+        try {
+            if (fs.existsSync(gitignorePath)) {
+                const content = fs.readFileSync(gitignorePath, 'utf8');
+                if (!content.includes('.agent-repo/')) {
+                    fs.appendFileSync(gitignorePath, '\n.agent-repo/\n');
+                }
+            } else {
+                fs.writeFileSync(gitignorePath, '.agent-repo/\n');
+            }
+        } catch {}
+    }
+
+    private ensureOpencodeConfig(): void {
+        if (!this.workspaceRoot) return;
+        const configPath = path.join(this.workspaceRoot, '.opencode.yaml');
+        try {
+            if (!fs.existsSync(configPath)) {
+                fs.writeFileSync(configPath, 'plugins:\n  - name: shadowgit\n    enabled: true\n');
+            }
+        } catch {}
+    }
+
     async initialize(): Promise<boolean> {
         if (!this.workspaceRoot || !this.repoPath) {
             return false;
@@ -239,10 +302,15 @@ export class ShadowGit {
         }
     }
 
-    async getCommitDiff(commitHash: string): Promise<{ files: { path: string; status: string; oldContent: string; newContent: string }[] }> {
+    private static readonly MAX_DIFF_FILES = 50;
+    private static readonly MAX_FILE_SIZE = 100 * 1024; // 100KB
+
+    async getCommitDiff(commitHash: string): Promise<{ files: { path: string; status: string; oldContent: string; newContent: string }[]; truncated?: number }> {
         try {
-            const files = await this.getCommitFiles(commitHash);
+            const allFiles = await this.getCommitFiles(commitHash);
             const parentHash = await this.getParentCommitHash(commitHash);
+            const truncated = allFiles.length > ShadowGit.MAX_DIFF_FILES ? allFiles.length - ShadowGit.MAX_DIFF_FILES : 0;
+            const files = allFiles.slice(0, ShadowGit.MAX_DIFF_FILES);
             
             const result: { path: string; status: string; oldContent: string; newContent: string }[] = [];
             
@@ -250,17 +318,28 @@ export class ShadowGit {
                 let oldContent = '';
                 let newContent = '';
                 
-                if (file.status === 'A') {
-                    newContent = await this.getFileAtCommit(commitHash, file.path) || '';
-                } else if (file.status === 'D') {
-                    if (parentHash) {
-                        oldContent = await this.getFileAtCommit(parentHash, file.path) || '';
+                try {
+                    if (file.status === 'A') {
+                        newContent = await this.getFileAtCommit(commitHash, file.path) || '';
+                    } else if (file.status === 'D') {
+                        if (parentHash) {
+                            oldContent = await this.getFileAtCommit(parentHash, file.path) || '';
+                        }
+                    } else {
+                        if (parentHash) {
+                            oldContent = await this.getFileAtCommit(parentHash, file.path) || '';
+                        }
+                        newContent = await this.getFileAtCommit(commitHash, file.path) || '';
                     }
-                } else {
-                    if (parentHash) {
-                        oldContent = await this.getFileAtCommit(parentHash, file.path) || '';
+
+                    if (oldContent.length > ShadowGit.MAX_FILE_SIZE) {
+                        oldContent = oldContent.slice(0, ShadowGit.MAX_FILE_SIZE) + '\n... (truncated, file too large)';
                     }
-                    newContent = await this.getFileAtCommit(commitHash, file.path) || '';
+                    if (newContent.length > ShadowGit.MAX_FILE_SIZE) {
+                        newContent = newContent.slice(0, ShadowGit.MAX_FILE_SIZE) + '\n... (truncated, file too large)';
+                    }
+                } catch {
+                    newContent = '(failed to load content)';
                 }
                 
                 result.push({
@@ -273,7 +352,7 @@ export class ShadowGit {
             
             result.sort((a, b) => a.path.localeCompare(b.path));
             
-            return { files: result };
+            return { files: result, truncated };
         } catch {
             return { files: [] };
         }
@@ -373,6 +452,145 @@ export class ShadowGit {
         } catch (error) {
             console.error('Failed to truncate history:', error);
             return false;
+        }
+    }
+
+    getExcludePatterns(): string[] {
+        if (!this.repoPath) return [];
+        const excludePath = path.join(this.repoPath, 'info', 'exclude');
+        try {
+            if (!fs.existsSync(excludePath)) return [];
+            return fs.readFileSync(excludePath, 'utf8')
+                .split('\n')
+                .map(l => l.trim())
+                .filter(l => l && !l.startsWith('#'));
+        } catch {
+            return [];
+        }
+    }
+
+    async getTrackedByExclude(): Promise<string[]> {
+        if (!this.hasRepo()) return [];
+        const patterns = this.getExcludePatterns();
+        if (patterns.length === 0) return [];
+
+        const tracked: Set<string> = new Set();
+        try {
+            const output = await this.execGit(['ls-files']);
+            const files = output.trim().split('\n').filter(f => f);
+
+            for (const file of files) {
+                for (const pattern of patterns) {
+                    const dir = pattern.replace(/\/+$/, '');
+                    if (
+                        file === dir ||
+                        file.startsWith(dir + '/') ||
+                        file.endsWith(pattern.replace('*', '')) ||
+                        (pattern.startsWith('*.') && file.endsWith(pattern.slice(1)))
+                    ) {
+                        tracked.add(dir + '/');
+                        break;
+                    }
+                }
+            }
+        } catch {}
+        return Array.from(tracked);
+    }
+
+    async cleanExcludedFromHistory(
+        onProgress?: (msg: string) => void
+    ): Promise<{ success: boolean; cleaned: string[]; size: string; error?: string }> {
+        if (!this.hasRepo() || !this.repoPath || !this.workspaceRoot) {
+            return { success: false, cleaned: [], size: 'N/A', error: 'Repository not initialized' };
+        }
+
+        const toClean = await this.getTrackedByExclude();
+        if (toClean.length === 0) {
+            return { success: true, cleaned: [], size: await this.getRepoSize() };
+        }
+
+        try {
+            // Clean up stale .git-rewrite from previous failed filter-branch
+            const gitRewriteDir = path.join(this.workspaceRoot!, '.git-rewrite');
+            if (fs.existsSync(gitRewriteDir)) {
+                fs.rmSync(gitRewriteDir, { recursive: true, force: true });
+                await this.execGit(['rm', '-r', '--cached', '--ignore-unmatch', '.git-rewrite']);
+                try { await this.execGit(['commit', '-m', 'Remove stale .git-rewrite']); } catch {}
+            }
+
+            // Remove stale refs/original from previous runs
+            const refsOriginal = path.join(this.repoPath, 'refs', 'original');
+            if (fs.existsSync(refsOriginal)) {
+                fs.rmSync(refsOriginal, { recursive: true, force: true });
+            }
+
+            const hasUnstaged = await this.hasChanges();
+            if (hasUnstaged) {
+                await this.execGit(['stash']);
+            }
+
+            // Shell-escape paths for the index-filter command
+            const rmArgs = toClean.map(p => {
+                const escaped = p.replace(/'/g, "'\\''");
+                return `git rm -r --cached --ignore-unmatch '${escaped}'`;
+            }).join(' && ');
+
+            const env = {
+                ...process.env,
+                GIT_DIR: this.repoPath,
+                GIT_WORK_TREE: this.workspaceRoot,
+                HOME: process.env.HOME || '/root',
+                FILTER_BRANCH_SQUELCH_WARNING: '1',
+            };
+
+            onProgress?.(`正在从历史中移除: ${toClean.join(', ')}`);
+            await execFileAsync('git', [
+                'filter-branch', '--force', '--index-filter',
+                rmArgs,
+                '--prune-empty', '--', '--all'
+            ], {
+                cwd: this.workspaceRoot,
+                env,
+                maxBuffer: 50 * 1024 * 1024,
+            });
+
+            // Clean up refs/original created by filter-branch
+            if (fs.existsSync(refsOriginal)) {
+                fs.rmSync(refsOriginal, { recursive: true, force: true });
+            }
+
+            // Clean up .git-rewrite if filter-branch left it
+            if (fs.existsSync(gitRewriteDir)) {
+                fs.rmSync(gitRewriteDir, { recursive: true, force: true });
+            }
+
+            onProgress?.('正在回收空间...');
+            await this.execGit(['reflog', 'expire', '--expire=now', '--all']);
+            await this.execGit(['gc', '--prune=now', '--aggressive']);
+
+            if (hasUnstaged) {
+                try { await this.execGit(['stash', 'pop']); } catch {}
+            }
+
+            return { success: true, cleaned: toClean, size: await this.getRepoSize() };
+        } catch (error: any) {
+            const errMsg = error?.stderr || error?.message || String(error);
+            console.error('Failed to clean excluded from history:', errMsg);
+            return { success: false, cleaned: [], size: 'N/A', error: errMsg };
+        }
+    }
+
+    async getRepoSize(): Promise<string> {
+        try {
+            if (!this.hasRepo()) return 'N/A';
+            const output = await this.execGit(['count-objects', '-vH']);
+            const sizeMatch = output.match(/size-pack:\s*(.+)/);
+            const looseMatch = output.match(/^size:\s*(.+)/m);
+            const packSize = sizeMatch?.[1]?.trim() || '0';
+            const looseSize = looseMatch?.[1]?.trim() || '0';
+            return `loose: ${looseSize}, packed: ${packSize}`;
+        } catch {
+            return 'N/A';
         }
     }
 

@@ -20,8 +20,16 @@
   "contributes": {
     "commands": [
       {
+        "command": "shadowgit.init",
+        "title": "Shadow Git: Initialize Repository"
+      },
+      {
         "command": "shadowgit.showTimeline",
         "title": "Shadow Git: Show Timeline"
+      },
+      {
+        "command": "shadowgit.showCommitDiff",
+        "title": "Shadow Git: Show Commit Diff"
       },
       {
         "command": "shadowgit.checkoutToCommit",
@@ -30,6 +38,10 @@
       {
         "command": "shadowgit.truncateHistory",
         "title": "Shadow Git: Delete History Before This"
+      },
+      {
+        "command": "shadowgit.cleanLargeFiles",
+        "title": "Shadow Git: Apply Exclude Rules to Clean History Commits"
       }
     ],
     "views": {

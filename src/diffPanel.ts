@@ -122,7 +122,7 @@ export class DiffPanel {
             fontSettings.lineHeight = Math.round(fontSettings.fontSize * 1.5);
         }
 
-        this.panel.webview.html = generateHtml(commit, diffData.files, highlighter, theme, fontSettings);
+        this.panel.webview.html = generateHtml(commit, diffData.files, highlighter, theme, fontSettings, diffData.truncated);
     }
 
     private generateEmptyHtml(): string {
@@ -145,7 +145,8 @@ function generateHtml(
     files: { path: string; status: string; oldContent: string; newContent: string }[],
     highlighter: any,
     theme: string,
-    font: { fontSize: number; fontFamily: string; lineHeight: number }
+    font: { fontSize: number; fontFamily: string; lineHeight: number },
+    truncated?: number
 ): string {
     const themeObj = highlighter.getTheme(theme);
     const bg: string = themeObj.bg;
@@ -275,6 +276,7 @@ function generateHtml(
         <div class="commit-meta">${escapeHtml(commit.author)} • ${commit.date.toLocaleString()}</div>
     </div>
     ${filesHtml}
+    ${truncated ? `<div style="text-align:center;padding:16px;color:${fg};opacity:0.7;font-size:13px;">+ ${truncated} more files not shown</div>` : ''}
     <script>function toggleFile(h){h.classList.toggle('collapsed');}</script>
 </body></html>`;
 }
